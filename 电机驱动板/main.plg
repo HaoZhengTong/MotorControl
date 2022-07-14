@@ -1,0 +1,14 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Project:</h2>
+C:\Users\COURAGE\Desktop\基于51单片机直流电机反馈驱动系统的研制\开源程序\main.uvproj
+Project File Date:  07/09/2022
+
+<h2>Output:</h2>
+Build target 'Target 1'
+linking...
+Program Size: data=102.6 xdata=52 code=6399
+creating hex file from "main"...
+"main" - 0 Error(s), 0 Warning(s).

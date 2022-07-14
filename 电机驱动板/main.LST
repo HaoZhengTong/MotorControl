@@ -1,0 +1,1019 @@
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          /*
+   2          1£º10µç»ú³ÌÐò£¬33.1776Mhz
+   3          
+   4          */
+   5          #include "STC15W.h"
+   6          //ÓÃÓÚ¸ü¸ÄÕý·´×ª
+   7          #define motor_CW motor_l=1;motor_r=0            //¿ØÖÆµç»úµÄÕý·´×ª Ä¬ÈÏ1¡¢0
+   8          #define motor_CCW motor_l=0;motor_r=1   //Ä¬ÈÏ0¡¢1
+   9          #define motor_CW_coder angle--                                  //¼ÇÂ¼½Ç¶ÈµÄÕý·´ Ä¬ÈÏ--
+  10          #define motor_CCW_coder angle++                                 //Ä¬ÈÏ++
+  11          #define motor_CWCCW_flag 1                                                      //ÉèÖÃµç»úÏà¶ÔÐý×ªÊ±µÄÕý·´£¬Ä¬ÈÏ1 ¿É¸ÄÎª-1
+  12          //ÓÃÓÚ¸ü¸Ä×ªËÙ±È
+  13          #define angleTOreal 9/8 //¼ÆËã£¬ÓÃ360/(¼õËÙ±È*±àÂëÆ÷Ò»È¦´Å¼«*2)
+  14          #define realTOangle 8/9 //ÓëÉÏÒ»ÌõÏà·´
+  15          #define angleSpeed 15/4 //ËÙ¶È (60*1000/50) / (¼õËÙ±È*±àÂëÆ÷Ò»È¦´Å¼«*2)
+  16          //ÎÂ¶È±£»¤Öµ
+  17          #define temp_safety 814 //¶ÔÓ¦65¶È
+  18          #define temp_safety_temp 65
+  19          
+  20          #define motor_brake motor_l=1;motor_r=1                           //Ë«¸ßµçÎ»
+  21          #define motor_software_stop motor_l=0;motor_r=0;CCAP0H=0  //µç»úÈíÉ²³µ £¨¶Ïµç£©
+  22          #define motor_nopower motor_l=0;motor_r=0;CCAP0H=0xff     //0xff
+  23          #define led_g CCAP1H                                                                      //ledgµÆ      PWM1
+  24          #define led_y CCAP2H                                                                      //ledyµÆ  PWM2
+  25          
+  26          unsigned char code IDcode_h=0;//Éí·ÝÐÅÏ¢£¬
+  27          unsigned char code IDcode_l=1;//Éí·ÝÐÅÏ¢£¬ÓÃÓÚÊ¶±ðÊÇÊ²Ã´Ó²¼þ£¬1Îª¸ßËÙµç»ú
+  28          unsigned char code version_h=1;
+  29          unsigned char code version_l=0;//¹Ì¼þ°æ±¾£¬ÓÉÁ½Î»×é³É
+  30          
+  31          
+  32          
+  33          unsigned int code temp_data[91]=                                                                           //ÎÂ¶È¶ÔÓ¦Öµ
+  34          {9183,8721,8285,7873,7485,7118,6771,6443,6133,5840 //-25
+  35          ,5562,5300,5051,4816,4593,4381,4181,3991,3811,3640 //-15
+  36          ,3477,3323,3177,3038,2905,2780,2660,2546,2438,2335 //-5
+  37          ,2237,2144,2055,1970,1890,1813,1739,1669,1602,1539 //5
+  38          ,1478,1420,1364,1311,1261,1212,1166,1122,1079,1039 //15
+  39          ,1000,963,927,893,861,830,800,771,743,717          //25
+  40           ,692,667,644,622,600,580,560,541,523,505          //35
+  41           ,488,472,457,442,427,413,400,387,375,363          //45
+  42           ,351,340,330,319,309,300,291,282,273,265,257};    //55
+  43                                                             //65
+  44          //±£»¤ÐÅÏ¢
+  45          sbit motor_i = P1^2; //µç»úµçÁ÷·´À¡ AD2           //AD0  µç»ú¹¤×÷µçÑ¹ÖµÅÐ¶¨
+  46          sbit tem = P1^3; //ÈÈÃôµç×è AD3                           //AD1  ÎÂ¶È±£»¤ÖµÅÐ¶¨
+  47          sbit power_v = P1^4; //×ÜµçÔ´µçÑ¹ AD4             //AD2  ×ÜµçÔ´12vÅÐ¶¨
+  48          //Ö¸Ê¾µÆ
+  49          sbit led_gg = P1^0; //»ÆµÆ PWM1
+  50          sbit led_yy = P3^7; //ÂÌµÆ PWM2
+  51          //µç»ú
+  52          sbit motor_l = P5^4; //µç»úÕý×ª ¸ßÓÐÐ§   1Îª¸ßµç£¬0ÎªµÍµç
+  53          sbit motor_r = P5^5; //µç»ú·´×ª µÍÓÐÐ§   1Îª¸ßµç£¬0ÎªµÍµç
+  54          sbit motor_pwm = P1^1; //µç»úËÙ¶È PWM0
+  55          sbit motor_a = P3^6; //µç»ú±àÂëÆ÷A               ²âËÙÈë¿Ú
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 2   
+
+  56          sbit motor_b = P3^2; //µç»ú±àÂëÆ÷B               ²âËÙÈë¿Ú
+  57          //Í¨Ñ¶
+  58          sbit io_t = P1^5; //·¢ËÍ±ê¼ÇÎ»                     Á½¸ö´®¿Ú
+  59          sbit io_r = P3^3; //½ÓÊÕ±ê¼ÇÎ» INT1
+  60          //ËÙ¶È
+  61          int xdata speed;//ËÙ¶È£¬µ¥Î» È¦/·ÖÖÓ
+  62          unsigned long xdata angle_record[11];  //Ã¿5ms¼ÇÂ¼Ò»´ÎËÙ¶È£¬Ã¿50ms¼ä¸ôµÄÊý¾Ý×ö²îÇóËÙ¶È
+  63          unsigned char angle_record_n;//¼ÇÂ¼ÉÏÒ»¸öÊý×éµÄÐòºÅ
+  64          //µç»ú½Ç¶È
+  65          long angle=0;//µç»úÊµÊ±½Ç¶È 
+  66          long angle_real;//¼ÇÂ¼ÕæÊµ½Ç¶È£¨µ¥Î»¶È£©£¬Ö÷ÒªÓÃÓÚÁ¬Ðø½Ç¶ÈËøÍ£Ä£Ê½ÏÂ¼õÉÙÎó²î
+  67          long angle_stop=0;//µç»úÍ£Ö¹(Ëø¶¨)½Ç¶È£¬Ò²×÷Ä¿±êÁ¿
+  68          //µç»ú¹¦ÄÜ±äÁ¿£¬ÓÃÓÚÖ´ÐÐÊ±µÄ²ÎÊý
+  69          unsigned char function=15;//ÓÃÓÚÖ´ÐÐµÄ¹¦ÄÜÐò£¬Ä¬ÈÏ15Îª×èÍ£
+  70          char motor_cw_ccw=1;//Õý·´×ª¼ÇÂ¼Ñ¡Ïî(¼ÇÂ¼Ä¿±ê×ª¶¯·½Ïò£¬²»Ó°Ïì½ÃÕýËã·¨)£¬Õý×ª1¡¢·´×ª-1£¬ÓÐ½ÓÊÕ³ÌÐòÖÃÎ»
+  71          long angle_target;//µç»ú½Ç¶ÈÄ¿±êÁ¿£¬½ö×÷ÖÐ¼äÖµ£¨ÖÐ¼äÖµÒâË¼¿ÉÄÜÊÇËµÕâ¸öÖµ²»ÄÜÈÏÎªÉè¶¨£¬ÊÇ³ÌÐòÔË×ª²úÉúµÄÖÐ¼ä
+             -Ä¿±êÖµ£©
+  72          long timer;//¼ÆÊ±
+  73          int power;//µç»ú¹¦ÂÊ°Ù·Ö±È-150~150,ºãËÙ-50~50
+  74          bit motor_stop_record;//ÔÚÊ±¼äÄ£Ê½ÏÂ£¬¼ÇÂ¼Ê×´ÎÍê³Éµ±Ç°Ðý×ª£¬=1Îª½øÈë£¬¶øºó¹éÁã,×Ô¶¯ÉèÖÃ£¬ÎÞÐè¸ÉÔ¤
+  75          bit motor_sangle_record=1;//×¢Òâ£¡½Ç¶ÈÄ£Ê½×ª¶¯Ç°ÐèÖÃ1.ÔÚ½Ç¶ÈÄ£Ê½ÏÂ£¬¼ÇÂ¼Íê³ÉÒ»´Î¶¯×÷(¶¯×÷Íê³Éºó²»Ö´ÐÐ½Ç¶È³
+             -ÌÐò)£¬=0ÎªÍê³É =1Îª½øÐÐÖÐ
+  76          //½ÓÊÕÃüÁî±äÁ¿
+  77          unsigned char content_function;//½ÓÊÕµÄ¹¦ÄÜÐòºÅ
+  78          unsigned char content[8];       //½ÓÊÜµÄÖ¸Áî´æ´¢£¿
+  79          unsigned char content_num;//½ÓÊÕÖ¸ÁîÎ»ÐòºÅ
+  80          unsigned long content_target;//½ÓÊÕµ½µÄÄÚÈÝ£¬ÁÙÊ±´æ´¢
+  81          //·¢ËÍÃüÁî±äÁ¿
+  82          long send_content_long;//·¢ËÍÊý¾Ý(³¤)
+  83          int send_content_int;//·¢ËÍÊý¾Ý(¶Ì)
+  84          char send_xor[4];//·¢ËÍÊý¾ÝÒì»òÐ£ÑéÎ»
+  85          //ÆäËû×´Ì¬¼ÇÂ¼±äÁ¿
+  86          int xdata voltage;//µçÑ¹£¬µ¥Î»
+  87          int xdata electricity;//µçÁ÷£¬µ¥Î»´ý¶¨£¡
+  88          int xdata temp=0;//ÎÂ¶È£¬µ¥Î»¶È
+  89          unsigned char main_ad_n=2;//ad¶ÁÈ¡¼ÇÎ»±äÁ¿
+  90          unsigned char send_num;//ÐèÒª·¢ËÍµÄÊý¾ÝÐòºÅ
+  91          //³ÌÐò¹¦ÄÜ±äÁ¿
+  92          bit motor_program_run;//ÓÉ¶¨Ê±Æ÷Í¨ÖªÖ÷³ÌÐòÖÐµÄµç»ú³ÌÐòÔËÐÐ¡£µ±=1ÔòÔËÐÐ£¬¶øºó¹éÁã¡£
+  93          bit serial_t_busy;//´®¿Ú·¢ËÍÃ¦£¬1ÎªÃ¦£¬0ÎªÏÐ
+  94          bit send_allow;//·¢ËÍ±êÖ¾Î»£¬1ÎªÐèÒª·¢ËÍ£¬0Îª²»·¢ËÍ
+  95          //Í£Ö¹³ÌÐòPID±äÁ¿
+  96          char stop_kp=8; //6,10
+  97          char stop_ki=20;//3,20×¢£º´Ë´¦Ê¹ÓÃ³ý·¨
+  98          char stop_kd=40; //30,40
+  99          int stop_i;
+ 100          int stop_d;
+ 101          int stop_lasterr;
+ 102          int stop_err;
+ 103          //ºãËÙ³ÌÐòPID±äÁ¿
+ 104          char code speed_kp=1;//5
+ 105          char code speed_ki=2;//3
+ 106          char code speed_kd=1;//5 ³ý·¨
+ 107          int speed_i;
+ 108          int speed_d;
+ 109          long speed_err;
+ 110          long speed_lasterr;
+ 111          long speed_lastangle;//ÉÏÒ»´Î½Ç¶È£¬ÓÃÓÚ¼ÆËãËÙ¶È
+ 112          
+ 113          
+ 114          //×Óº¯ÊýÄ¿Â¼
+ 115          void delay(unsigned int delay_i);//ÑÓ³Ù1ºÁÃë
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 3   
+
+ 116          //void SendString(char *SendString_n);//´®¿Ú·¢ËÍ³ÌÐò
+ 117          void send_long(long send_content_long);
+ 118          void send_int(send_content_int);
+ 119          void receive_angle_increment();//½ÓÊÕ³ÌÐòÖÐµÄ½Ç¶ÈÔöÁ¿¼ÇÂ¼³ÌÐò
+ 120          void overflow();//ÅÐ¶Ï¼ÆËã³Ö·ñÒç³ö£¬Èç¹ûÒç³öÔòÍ£Ö¹³ÌÐò
+ 121          void receive_angle_absolute();//½ÓÊÕ³ÌÐòÖÐµÄ½Ç¶È¾ø¶ÔÖµ¼ÇÂ¼³ÌÐò
+ 122          int temp_real(int temp_real_n);//ÎÂ¶È×ª»»³ÌÐò£¬·µ»ØÎÂ¶È
+ 123          void speed_get();//ËÙ¶È»ñÈ¡³ÌÐò£¬Ó¦ÓÃÔÚÖ÷³ÌÐòÖÐ
+ 124          void motor_stop(angle_stop);//µç»úÍ£Ö¹Ëø¶¨³ÌÐò
+ 125          void motor_speed(speed_target);//ºãËÙ³ÌÐò
+ 126          void Init();//³õÊ¼ÉèÖÃ
+ 127          void UartInit();//´®¿ÚÉèÖÃ
+ 128          void PWMInit();//PWMÉèÖÃ
+ 129          void Timer0Init();//T0ÉèÖÃ
+ 130          void ADInit();//ADÉèÖÃ
+ 131          void motor_move(int motor_move_n);//¿ØÖÆµç»úÔË£¨·¶Î§-150 150£©  
+ 132          void UART_SendByte(unsigned char Byte);
+ 133          
+ 134          void main()
+ 135          { unsigned int main_n;
+ 136   1              unsigned char main_led;//ÂÌÉ«LEDºôÎüµÆÉÁË¸ËùÓÃ±äÁ¿
+ 137   1              bit main_led_n;//Í¬ÉÏ
+ 138   1              Init();//È«²¿ÅäÖÃ³õÊ¼»¯
+ 139   1              led_y=0xff;//¹Ø±Õ»ÆÉ«LED        
+ 140   1              io_t=1;//Ã¦Î»£ºÏÐ
+ 141   1              while(1)
+ 142   1              {       
+ 143   2                      if(send_allow)//·¢ËÍÊý¾Ý
+ 144   2                      {
+ 145   3                              send_allow=0;
+ 146   3                              switch(send_num)
+ 147   3                              {
+ 148   4                                      case 1://½Ç¶È
+ 149   4                                              {       send_long((long)angle*angleTOreal);     }break;
+ 150   4                                      case 2://ËÙ¶È
+ 151   4                                              {       send_int(speed); }break;        
+ 152   4                                      case 3://µçÑ¹
+ 153   4                                              {       send_int(voltage); }break;      
+ 154   4                                      case 4://µçÁ÷
+ 155   4                                              {       send_int(electricity);}break;   
+ 156   4                                      case 5://ÎÂ¶È
+ 157   4                                              {       send_int(temp_real(temp)); }break;      
+ 158   4                                      case 6://¸´Î»
+ 159   4                                              {       IAP_CONTR=0xe0; }break; 
+ 160   4                                      case 7://ÊµÊ±¹¦ÂÊ°Ù·Ö±È£¨/255£©
+ 161   4                                      {
+ 162   5                                              if(CCAP0H==0)
+ 163   5                                              send_int(0);
+ 164   5                                              else
+ 165   5                                              {
+ 166   6                                                      if(motor_l==1 && motor_r==0)
+ 167   6                                                              send_int(255-CCAP0H);
+ 168   6                                                      else if(motor_l==0 && motor_r==1)
+ 169   6                                                              send_int((255-CCAP0H)*-1);
+ 170   6                                                      else 
+ 171   6                                                              send_int(0);
+ 172   6                                              }
+ 173   5                                      }break;
+ 174   4                                      case 255:
+ 175   4                                              {       send_long((unsigned long)IDcode_h<<24|(unsigned long)IDcode_l<<16|(unsigned long)version_h<<8|versi
+             -on_l);}break;
+ 176   4                              }
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 4   
+
+ 177   3                      }
+ 178   2                      if(motor_program_run)
+ 179   2                      { 
+ 180   3      /*³ÌÐòÖ´ÐÐÊ±¼ä¼ä¸ô±äÁ¿*/
+ 181   3                              main_n++;
+ 182   3                              if(main_n==0xffff)main_n=0;
+ 183   3                              motor_program_run=0;
+ 184   3      /*ledºôÎüµÆ³ÌÐò*/
+ 185   3                              if(main_led_n)main_led--;
+ 186   3                              else main_led++;
+ 187   3                              led_g=main_led;
+ 188   3                              if(main_led==255)main_led_n=1;
+ 189   3                              else if(main_led==0)main_led_n=0;
+ 190   3              
+ 191   3                              switch(function)
+ 192   3                              { 
+ 193   4                                      case 0://¹¦ÄÜ0£º¹¦ÂÊ°Ù·Ö±È¡¢ÎÞÏÞÖÆ
+ 194   4                                      { 
+ 195   5                                              motor_move(power);
+ 196   5                                              io_t=0;//Ã¦ÐÅºÅÎ»
+ 197   5                                      }break;
+ 198   4                                      case 1://¹¦ÄÜ1£º¹¦ÂÊ°Ù·Ö±È¡¢Ê±¼ä¡¢ËøÍ£
+ 199   4                                      {       
+ 200   5                                              if(timer>5)
+ 201   5                                              { 
+ 202   6                                                      timer-=5;
+ 203   6                                                      motor_move(power);
+ 204   6                                                      motor_stop_record=1;
+ 205   6                                              }
+ 206   5                                              else
+ 207   5                                              { 
+ 208   6                                                      if(motor_stop_record)
+ 209   6                                                      {
+ 210   7                                                              motor_stop_record=0;
+ 211   7                                                              angle_stop=angle;
+ 212   7                                                      }
+ 213   6                                                      motor_stop(angle_stop);    //ËøÍ£µ½Ä¿±ê½Ç¶È
+ 214   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 215   6                                              }               
+ 216   5                                      }break;
+ 217   4                                      case 2://¹¦ÄÜ2£º¹¦ÂÊ°Ù·Ö±È¡¢Ê±¼ä¡¢×èÍ£
+ 218   4                                      {       
+ 219   5                                              if(timer>5)
+ 220   5                                              {
+ 221   6                                                      timer-=5;
+ 222   6                                                      motor_move(power);
+ 223   6                                              }
+ 224   5                                              else
+ 225   5                                              { 
+ 226   6                                                      motor_software_stop;//×èÍ£
+ 227   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 228   6                                              }               
+ 229   5                                      }break;         
+ 230   4                                      case 3://¹¦ÄÜ3£º¹¦ÂÊ°Ù·Ö±È¡¢Ê±¼ä¡¢ÎÞ×è
+ 231   4                                      {       
+ 232   5                                              if(timer>5)
+ 233   5                                              { 
+ 234   6                                                      timer-=5;
+ 235   6                                                      motor_move(power);
+ 236   6                                              }
+ 237   5                                              else
+ 238   5                                              { 
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 5   
+
+ 239   6                                                      motor_nopower;
+ 240   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 241   6                                              }               
+ 242   5                                      }break;                 
+ 243   4                                      case 4://¹¦ÄÜ4£º¹¦ÂÊ°Ù·Ö±È¡¢½Ç¶È¡¢ËøÍ£
+ 244   4                                      {       
+ 245   5                                              if((angle_stop-angle)*motor_cw_ccw > (power/3)*motor_cw_ccw && motor_sangle_record)
+ 246   5                                              { 
+ 247   6                                                      motor_move(power);
+ 248   6                                              }
+ 249   5                                              else
+ 250   5                                              { 
+ 251   6                                                      motor_sangle_record=0;            //Ê¹ÓÃÍê½Ç¶ÈÖÃ0£¬²»ÖªµÀÔõÃ´»Ö¸´£¿Ö»ÄÜÓÃÒ»´Î£¿
+ 252   6                                                      motor_stop(angle_stop);
+ 253   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 254   6                                              }               
+ 255   5                                      }break; 
+ 256   4                                      case 5://¹¦ÄÜ5£º¹¦ÂÊ°Ù·Ö±È¡¢½Ç¶È¡¢×èÍ£
+ 257   4                                      {       
+ 258   5                                              if(angle_stop*motor_cw_ccw > angle*motor_cw_ccw && motor_sangle_record)
+ 259   5                                              {
+ 260   6                                                      motor_move(power);
+ 261   6                                              }
+ 262   5                                              else
+ 263   5                                              {
+ 264   6                                                      motor_sangle_record=0;
+ 265   6                                                      motor_software_stop;//×èÍ£
+ 266   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 267   6                                              }               
+ 268   5                                      }break;                         
+ 269   4                                      case 6://¹¦ÄÜ6£º¹¦ÂÊ°Ù·Ö±È¡¢½Ç¶È¡¢ÎÞ×è
+ 270   4                                      {       
+ 271   5                                              if(angle_stop*motor_cw_ccw > angle*motor_cw_ccw && motor_sangle_record)
+ 272   5                                              {
+ 273   6                                                      motor_move(power);
+ 274   6                                              }
+ 275   5                                              else
+ 276   5                                              {
+ 277   6                                                      motor_sangle_record=0;
+ 278   6                                                      motor_nopower;
+ 279   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 280   6                                              }               
+ 281   5                                      }break;                 
+ 282   4                                      case 10://¹¦ÄÜ10£ººãËÙ¡¢ÎÞÏÞÖÆ
+ 283   4                                      {       
+ 284   5                                              if(power==0 && motor_sangle_record)
+ 285   5                                              {
+ 286   6                                                      motor_sangle_record=0;//¼õÐ¡×î´ó¹¦ÂÊ
+ 287   6                                                      angle_stop=angle;
+ 288   6                                                      speed_i=0;speed_lasterr=0;speed_lastangle=angle;//ºãËÙPIDÖÐ¼ÇÂ¼ÉÏ´Î½Ç¶È
+ 289   6                                                      motor_stop(angle_stop);
+ 290   6                                                      
+ 291   6                                              }
+ 292   5                                              else if(power==0)
+ 293   5                                              {
+ 294   6                                                      motor_stop(angle_stop);
+ 295   6                                              }
+ 296   5                                              else if(main_n%5==0)
+ 297   5                                              {
+ 298   6                                                      motor_speed(power);motor_sangle_record=1;
+ 299   6                                              }
+ 300   5                                                      io_t=1;//Ã¦Î»£ºÏÐ
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 6   
+
+ 301   5                                      }break;         
+ 302   4                                      case 11://¹¦ÄÜ11£ººãËÙ¡¢Ê±¼ä¡¢ËøÍ£
+ 303   4                                      {       
+ 304   5                                              if(timer>5)
+ 305   5                                              {
+ 306   6                                                      timer-=5;
+ 307   6                                                      if(main_n%5==0)
+ 308   6                                                              motor_speed(power);
+ 309   6                                                      motor_stop_record=1;
+ 310   6                                              }
+ 311   5                                              else
+ 312   5                                              {
+ 313   6                                                      if(motor_stop_record)
+ 314   6                                                      {
+ 315   7                                                              motor_stop_record=0;
+ 316   7                                                              angle_stop=angle;
+ 317   7                                                      }                                               
+ 318   6                                                      motor_stop(angle_stop);
+ 319   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 320   6                                              }       
+ 321   5                                      }break;         
+ 322   4                                      case 12://¹¦ÄÜ12£ººãËÙ¡¢Ê±¼ä¡¢×èÍ£
+ 323   4                                      {       
+ 324   5                                              if(timer>5)
+ 325   5                                              {
+ 326   6                                                      timer-=5;
+ 327   6                                                      if(main_n%5==0)
+ 328   6                                                              motor_speed(power);
+ 329   6                                              }
+ 330   5                                              else
+ 331   5                                              {
+ 332   6                                                      motor_software_stop;//×èÍ£      
+ 333   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 334   6                                              }
+ 335   5                                      }break; 
+ 336   4                                      case 13://¹¦ÄÜ13£ººãËÙ¡¢Ê±¼ä¡¢ÎÞ×è
+ 337   4                                      {       
+ 338   5                                              if(timer>5)
+ 339   5                                              {
+ 340   6                                                      timer-=5;
+ 341   6                                                      if(main_n%5==0)
+ 342   6                                                              motor_speed(power);
+ 343   6                                              }
+ 344   5                                              else
+ 345   5                                              {
+ 346   6                                                      motor_nopower;
+ 347   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 348   6                                              }
+ 349   5                                      }break; 
+ 350   4                                      case 14://¹¦ÄÜ14£ººãËÙ¡¢½Ç¶È¡¢ËøÍ£
+ 351   4                                      {       
+ 352   5                                              if((angle_stop-angle)*motor_cw_ccw > (power/2)*motor_cw_ccw && motor_sangle_record)
+ 353   5                                              {
+ 354   6                                                      if(main_n%5==0)
+ 355   6                                                              motor_speed(power);
+ 356   6                                              }
+ 357   5                                              else
+ 358   5                                              { motor_sangle_record=0;
+ 359   6                                                      motor_stop(angle_stop);
+ 360   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 361   6                                              }               
+ 362   5                                      }break; 
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 7   
+
+ 363   4                                      case 15://¹¦ÄÜ15£ººãËÙ¡¢½Ç¶È¡¢×èÍ£
+ 364   4                                      {       
+ 365   5                                              if(angle_stop*motor_cw_ccw > angle*motor_cw_ccw && motor_sangle_record)
+ 366   5                                              {
+ 367   6                                                      if(main_n%5==0)
+ 368   6                                                              motor_speed(power);
+ 369   6                                              }
+ 370   5                                              else
+ 371   5                                              { motor_sangle_record=0;
+ 372   6                                                      motor_software_stop;//×èÍ£      
+ 373   6                                                      io_t=1;//Ã¦Î»£ºÏÐ
+ 374   6                                              }               
+ 375   5                                      }break;                                 
+ 376   4                                      case 16://¹¦ÄÜ16£ººãËÙ¡¢½Ç¶È¡¢ÎÞ×è
+ 377   4                                      {       
+ 378   5                                                      if(angle_stop*motor_cw_ccw > angle*motor_cw_ccw && motor_sangle_record)
+ 379   5                                                      {
+ 380   6                                                              if(main_n%5==0)
+ 381   6                                                                      motor_speed(power);
+ 382   6                                                      }
+ 383   5                                                      else
+ 384   5                                                      { motor_sangle_record=0;
+ 385   6                                                              motor_nopower;
+ 386   6                                                              io_t=1;//Ã¦Î»£ºÏÐ
+ 387   6                                                      }               
+ 388   5                                      }break;                                 
+ 389   4                                      case 20://¹¦ÄÜ14£ºËøÍ£
+ 390   4                                      {
+ 391   5                                              if(motor_sangle_record)
+ 392   5                                                      {angle_stop=angle;motor_sangle_record=0;}
+ 393   5                                              else
+ 394   5                                                      {motor_stop(angle_stop);io_t=1;}//Ã¦Î»£ºÏÐ
+ 395   5                                      }break;                                 
+ 396   4                                      case 21://¹¦ÄÜ15£º×èÍ£
+ 397   4                                      {       
+ 398   5                                              motor_software_stop;io_t=1;//Ã¦Î»£ºÏÐ
+ 399   5                                      }break;                                 
+ 400   4                                      case 22://¹¦ÄÜ16£ºÎÞ×è
+ 401   4                                      {       
+ 402   5                                              motor_nopower;io_t=1;//Ã¦Î»£ºÏÐ
+ 403   5                                      }break;                                         
+ 404   4                              }
+ 405   3      //»ñÈ¡ËÙ¶È³ÌÐò                  
+ 406   3                              speed_get();
+ 407   3                  if(speed<0)
+ 408   3                                      speed_get();
+ 409   3      /*AD×ª»»³ÌÐò*/
+ 410   3                              ADC_CONTR=0x88+main_ad_n;                  //ADC_CONTRÅäÖÃÎª1000 1000+2~4£¨¹©µç£¬540¸öÊ±ÖÓÖÜÆÚ×ª»»Ò»´Î£¬¿ªÊ¼×ª»»£¬Ñ¡
+             -ÔñP1.2~P1.4×÷ÎªADÊäÈë)
+ 411   3                              main_ad_n++;
+ 412   3                              if(main_ad_n==5)main_ad_n=2;
+ 413   3      /*ADÎÂ¶È±£»¤³ÌÐò*/
+ 414   3                              while(temp>temp_safety)//´óÓÚ65¶È
+ 415   3                              { 
+ 416   4                                      while(1)
+ 417   4                                      {
+ 418   5                                              led_g=255;motor_nopower;
+ 419   5                                              led_y=0;delay(200);led_y=255;delay(200);
+ 420   5                                              /*AD×ª»»³ÌÐò*/
+ 421   5                                              ADC_CONTR=0x88+main_ad_n;
+ 422   5                                              main_ad_n++;
+ 423   5                                              if(main_ad_n==5)main_ad_n=2;
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 8   
+
+ 424   5                                      }
+ 425   4                              }
+ 426   3                      }
+ 427   2              }
+ 428   1      }
+ 429          /*************************/
+ 430          /*ÎÂ¶È×ª»»³ÌÐò*/
+ 431          /*************************/
+ 432          int temp_real(int temp_real_n)
+ 433          { int temp_real_nn=0;//ÐòºÅ,Ò²ÊÇÎÂ¶È
+ 434   1              temp_real_n=1024000/temp_real_n-1000;
+ 435   1              while(1)
+ 436   1              {
+ 437   2                      if(temp_data[temp_real_nn]<temp_real_n)                  //Êý¾Ý±íÖÐµÚnnÏîÐ¡ÓÚ²âÁ¿ÖµÔò·µ»ØÎÂ¶È
+ 438   2                      {
+ 439   3                              if(temp_real_nn-26>temp_safety_temp)             //³¬³öÁËµÚ91Ïî£¨65¶È£©£¬·µ»Ø°²È«ÎÂ¶È
+ 440   3                                      return temp_safety_temp;
+ 441   3                              else                                                                             //·µ»ØÎÂ¶È
+ 442   3                                      return temp_real_nn-26;
+ 443   3                      }
+ 444   2                      else
+ 445   2                              temp_real_nn++;                                                           //Ìá¸ßÎÂ¶È£¨½µµÍÐÅºÅ²ÎÊýÖµ£©¼ÌÐøÓëÊµ¼ÊÎÂ¶È±È½Ï
+ 446   2              }
+ 447   1      }
+ 448          
+ 449          /*************************/
+ 450          /*ËÙ¶È»ñ³ÌÐò£¬Ó¦ÓÃÔÚÖ÷³ÌÐòÖÐ*/
+ 451          /*************************/
+ 452          void speed_get()
+ 453          {
+ 454   1                              angle_record[angle_record_n]=angle;                                                                                                          //½«µ±Ç°¼ÇÂ¼µÄ½Ç¶È´æ´¢µ½ÎÂ¶È¼
+             -ÇÂ¼Êý×éÖÐ
+ 455   1                              if(angle_record_n==10)                                                                                                                                                           //´æÂúÒ»ÂÖºó×îºóÒ»Î»ÓëÐÂµÄµÚÒ»Î»×÷²îÇóËÙ¶È
+ 456   1                              {
+ 457   2                                       if(angle_record[10]>=angle_record[0])
+ 458   2                                       {speed=(angle_record[10]-angle_record[0])*angleSpeed;}
+ 459   2                                       else
+ 460   2                                       {speed=(angle_record[0]-angle_record[10])*angleSpeed;}
+ 461   2                              }
+ 462   1                              else
+ 463   1                              {                                                                                                                                                                                                        //Ã»´æÂú10Î»Ê±ÏàÁÚÁ½Î»×÷²îÇóËÙ¶È
+ 464   2                                      if(angle_record[angle_record_n]>=angle_record[angle_record_n+1])
+ 465   2                                      {speed=(angle_record[angle_record_n]-angle_record[angle_record_n+1])*angleSpeed;}
+ 466   2                                      else
+ 467   2                                      {speed=(angle_record[angle_record_n+1]-angle_record[angle_record_n])*angleSpeed;}
+ 468   2                              }
+ 469   1                              angle_record_n++;                                                                                                                                                                        //Ö¸Õë¼ÓÒ»£¬ÍùºóÒ»Î»´æÏÂÒ»¸öÎÂ¶È
+ 470   1                              if(angle_record_n==11)angle_record_n=0;
+ 471   1      }
+ 472          /*************************/
+ 473          /*ÅÐ¶Ï¼ÆËãÊÇ·ñÒç³ö£¬Èç¹ûÒç³öÔòÍ£Ö¹³ÌÐò£¬»ÆµÆ³¤ÁÁ*/
+ 474          /*************************/
+ 475          void overflow()
+ 476          {
+ 477   1              if(OV==1)//Èç¹ûÒç³ö
+ 478   1              {EA=0;led_g=255;led_y=0;motor_software_stop;while(1);}                  
+ 479   1      }
+ 480          /*************************/
+ 481          /*½ÓÊÕ³ÌÐòÖÐ£¬½Ç¶È¾ø¶ÔÖµ¼ÇÂ¼*/
+ 482          /*************************/
+ 483          void receive_angle_absolute()
+ 484          {
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 9   
+
+ 485   1              angle_real=angle_target;
+ 486   1              angle_stop=angle_target*realTOangle;
+ 487   1              if(angle_target>angle)
+ 488   1              {                               
+ 489   2                      motor_cw_ccw=1;//±ê¼ÇÕý×ª
+ 490   2                      if(power<0)power*=-1;//ÐèÒªÕý×ª
+ 491   2              }
+ 492   1              else
+ 493   1              {                               
+ 494   2                      motor_cw_ccw=-1;//±ê¼Ç·´×ª
+ 495   2                      if(power>0)power*=-1;//ÐèÒª·´×ª
+ 496   2              }
+ 497   1      }
+ 498          /*************************/
+ 499          /*½ÓÊÕ³ÌÐòÖÐ£¬½Ç¶ÈÔöÁ¿¼ÇÂ¼*/
+ 500          /*************************/
+ 501          void receive_angle_increment()
+ 502          {
+ 503   1              if(function==4 || function==14)//Èç¹ûÉÏ´ÎÒ²ÊÇ½Ç¶ÈËøÍ£Ä£Ê½£¬°´ÉÏ´Î½Ç¶ÈÄ¿±ê×÷Îª»ù´¡Á¿ÀÛ¼Ó
+ 504   1              {
+ 505   2                      if(power>0)//Èç¹û¹¦ÂÊÎªÕý×ª
+ 506   2                      {
+ 507   3                              if(angle_target>0)//Èç¹û½Ç¶ÈÎªÕý
+ 508   3                              {
+ 509   4                                      motor_cw_ccw=1*motor_CWCCW_flag;//±ê¼ÇÕý×ª
+ 510   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 511   4                                      { 
+ 512   5                                              angle_real+=angle_target;
+ 513   5                                              overflow();
+ 514   5                                              angle_stop=angle_real*realTOangle; 
+ 515   5                                      }
+ 516   4                              }       
+ 517   3                              else//Èç¹û½Ç¶ÈÎª¸º
+ 518   3                              { 
+ 519   4                                      motor_cw_ccw=-1*motor_CWCCW_flag;//±ê¼Ç·´×ª
+ 520   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 521   4                                      { 
+ 522   5                                              angle_real+=angle_target;
+ 523   5                                              overflow();
+ 524   5                                              angle_stop=angle_real*realTOangle; 
+ 525   5                                      }
+ 526   4                                      power=power*-1;//¹¦ÂÊ±äÎª¸ºÊý
+ 527   4                              }
+ 528   3                      }               
+ 529   2                      else//Èç¹û¹¦ÂÊÎª·´×ª
+ 530   2                      {
+ 531   3                              if(angle_target>0)//Èç¹û½Ç¶ÈÎªÕý
+ 532   3                              {
+ 533   4                                      motor_cw_ccw=-1*motor_CWCCW_flag;//±ê¼Ç·´×ª
+ 534   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 535   4                                      { 
+ 536   5                                              angle_real-=angle_target;
+ 537   5                                              overflow();
+ 538   5                                              angle_stop=angle_real*realTOangle; 
+ 539   5                                      }
+ 540   4                              }       
+ 541   3                              else//Èç¹û½Ç¶ÈÎª¸º
+ 542   3                              {
+ 543   4                                      motor_cw_ccw=1*motor_CWCCW_flag;//±ê¼ÇÕý×ª
+ 544   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 545   4                                      { 
+ 546   5                                              angle_real-=angle_target;
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 10  
+
+ 547   5                                              overflow();
+ 548   5                                              angle_stop=angle_real*realTOangle; 
+ 549   5                                      }       
+ 550   4                                      power=power*-1;//¹¦ÂÊ±äÎªÕý
+ 551   4                              }       
+ 552   3                      }
+ 553   2              }
+ 554   1              else//ÉÏ´Î²»ÊÇ½Ç¶ÈËø¶¨Ä£Ê½
+ 555   1              {
+ 556   2                      if(power>0)//Èç¹û¹¦ÂÊÎªÕý×ª
+ 557   2                      {
+ 558   3                              if(angle_target>0)//Èç¹û½Ç¶ÈÎªÕý
+ 559   3                              {
+ 560   4                                      motor_cw_ccw=1*motor_CWCCW_flag;//±ê¼ÇÎªÕý×ª
+ 561   4                                      angle_stop=angle+(angle_target*realTOangle);//ÀÛ¼Ó½Ç¶È angle_real
+ 562   4                                      overflow();
+ 563   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 564   4                                              { angle_real=angle_stop*angleTOreal; }//½«½Ç¶È»»Ëã²¢¼ÇÂ¼
+ 565   4                              }       
+ 566   3                              else//Èç¹û½Ç¶ÈÎª¸º
+ 567   3                              { 
+ 568   4                                      motor_cw_ccw=-1*motor_CWCCW_flag;//±ê¼Ç·´×ª
+ 569   4                                      angle_stop=angle+(angle_target*realTOangle);//ÀÛ¼Ó¸º½Ç¶È
+ 570   4                                      overflow();
+ 571   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 572   4                                              { angle_real=angle_stop*angleTOreal; }//½«½Ç¶È»»Ëã²¢¼ÇÂ¼
+ 573   4                                      power*=-1;//¹¦ÂÊ±äÎª¸ºÊý
+ 574   4                              }
+ 575   3                      }               
+ 576   2                      else//Èç¹û¹¦ÂÊÎª·´×ª
+ 577   2                      {
+ 578   3                              if(angle_target>0)//Èç¹û½Ç¶ÈÎªÕý
+ 579   3                              {
+ 580   4                                      motor_cw_ccw=-1*motor_CWCCW_flag;//±ê¼Ç·´×ª
+ 581   4                                      angle_stop=angle+(angle_target*-realTOangle);//¼õ½Ç¶È
+ 582   4                                      overflow();
+ 583   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 584   4                                              { angle_real=angle_stop*angleTOreal; }//½«½Ç¶È»»Ëã²¢¼ÇÂ¼
+ 585   4                              }       
+ 586   3                              else//Èç¹û½Ç¶ÈÎª¸º
+ 587   3                              { 
+ 588   4                                      motor_cw_ccw=1*motor_CWCCW_flag;//±ê¼ÇÕý×ª
+ 589   4                                      angle_stop=angle+(angle_target*-realTOangle);//¼õ¸º½Ç¶È 
+ 590   4                                      overflow();
+ 591   4                                      if(content[1]==4 || content[1]==14)//Èç¹ûµ±Ç°¹¦ÄÜÎª½Ç¶ÈÔöÁ¿ËøÍ£
+ 592   4                                              { angle_real=angle_stop*angleTOreal; }//½«½Ç¶È»»Ëã²¢¼ÇÂ¼                                
+ 593   4                                      power*=-1;//¹¦ÂÊ±äÎªÕý
+ 594   4                              }       
+ 595   3                      }
+ 596   2              }
+ 597   1      }
+ 598          
+ 599          /*************************/
+ 600          /*µç»úºãËÙ³ÌÐò*/
+ 601          /*************************/
+ 602          void motor_speed(speed_target)
+ 603          {       
+ 604   1              speed_err=speed_lastangle-angle+speed_target;
+ 605   1              speed_i+=speed_err;
+ 606   1              if(speed_i<-150)speed_i=-150;//ÏÞÖÆ²¹»ØÁ¿
+ 607   1              else if(speed_i>150)speed_i=150;//ÏÞÖÆ²¹»ØÁ¿
+ 608   1              speed_d=speed_err-speed_lasterr;
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 11  
+
+ 609   1              motor_move(speed_err*speed_kp+speed_i*speed_ki+speed_d/speed_kd);
+ 610   1              speed_lasterr=speed_err;
+ 611   1              speed_lastangle=angle;
+ 612   1      }
+ 613          /*************************/
+ 614          /*µç»úÍ£Ö¹³ÌÐò*/
+ 615          /*************************/
+ 616          void motor_stop(angle_stop)
+ 617          {
+ 618   1              stop_err=angle_stop-angle;              //²îÖµ
+ 619   1              stop_i+=stop_err*0.8;
+ 620   1              stop_d=stop_err-stop_lasterr;
+ 621   1              motor_move(stop_err*stop_kp+stop_i/stop_ki+stop_kd*stop_d);
+ 622   1              stop_lasterr=stop_err;
+ 623   1      }
+ 624          /*************************/
+ 625          /*33.1776Mhz ÑÓ³Ù1msµÄ±¶Êý*/
+ 626          /*************************/
+ 627          void delay(unsigned int delay_i)
+ 628          {
+ 629   1              unsigned int delay_j;
+ 630   1        while(delay_i--)
+ 631   1                      for(delay_j=0;delay_j<860;delay_j++);
+ 632   1      }
+ 633          /*************************/
+ 634          /*ADÖÐ¶Ï£º¶ÁÈ¡µçÑ¹¡¢µçÁ÷¡¢ÎÂ¶È*/
+ 635          /*************************/
+ 636          void adc_isr() interrupt 5 using 1
+ 637          { 
+ 638   1              ADC_CONTR&=0x07;//ADµçÔ´ºÍ±êÖ¾Î»ÇåÁã              °´Î»Óë
+ 639   1              switch(ADC_CONTR&0x07)
+ 640   1              {
+ 641   2                      case 2://µç»úµçÁ÷
+ 642   2                      { 
+ 643   3                              electricity=ADC_RES*4+ADC_RESL;
+ 644   3                      }break;
+ 645   2                      case 3://ÈÈÃôµç×è
+ 646   2                      {
+ 647   3                              temp=ADC_RES*4+ADC_RESL-30;
+ 648   3                      }break;
+ 649   2                      case 4://µçÔ´µçÑ¹
+ 650   2                      {
+ 651   3                              voltage=ADC_RES*4+ADC_RESL;
+ 652   3                      }break;
+ 653   2              }
+ 654   1      }
+ 655          /*************************/
+ 656          /*ÍâÖÐ¶Ï0£º¶ÁÈ¡µç»ú±àÂëÆ÷*/
+ 657          /*************************/
+ 658          void motor_angle_int0() interrupt 0
+ 659          { 
+ 660   1              if(motor_a == motor_b)
+ 661   1                      motor_CW_coder;
+ 662   1              else
+ 663   1                      motor_CCW_coder;
+ 664   1      } 
+ 665          /**********************************/
+ 666          /*ÍâÖÐ¶Ï1:Ö÷¿ØÆ÷Í¨Öªµç»ú¿É½øÐÐÍ¨Ñ¶*/
+ 667          /**********************************/
+ 668          void motor_angle_int1() interrupt 2
+ 669          { 
+ 670   1              content_num=0;
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 12  
+
+ 671   1      } 
+ 672          /*************************/
+ 673          /*´®¿ÚÖÐ¶Ï*/
+ 674          /*************************/
+ 675          void uart() interrupt 4 using 1
+ 676          {       
+ 677   1      
+ 678   1              if(RI)
+ 679   1              {
+ 680   2                      RI=0;
+ 681   2      
+ 682   2      //              UART_SendByte(RI);
+ 683   2      //              UART_SendByte(io_r);
+ 684   2      //              UART_SendByte(content_num);
+ 685   2                if(io_r && content_num<8)//½ÓÊÕÑ¡Î»À­µÍ
+ 686   2                      { 
+ 687   3                              content[content_num]=SBUF;
+ 688   3                              UART_SendByte(content[content_num]);
+ 689   3                              UART_SendByte(content_num);
+ 690   3                              content_num++;
+ 691   3                              UART_SendByte(content_num);
+ 692   3                              if(content[0]!=0xa5)//Èç¹ûÃ»ÊÕµ½ÆðÊ¼Î»ÔòÍ£Ö¹½ÓÊÕÊý¾Ý
+ 693   3                                      
+ 694   3                                      content_num=0;
+ 695   3                      }
+ 696   2                      if(content_num==8)//½ÓÊÕÂú
+ 697   2                      {
+ 698   3                              if(content[7]==0xa5 && content[6]==0xa5 && content[5]==0xa5 && content[4]==0xa5 && content[3]==0xa5 && 
+             -content[2]==0xa5 && content[1]==0xa5)//È«ÊÇ0xa5µÄ»°£¬»Ø´«Éí·ÝÐÅÏ¢
+ 699   3                              {
+ 700   4                                      send_allow=1;//ÔÊÐí»Ø´«
+ 701   4                                      send_num=255;//»Ø´«ÄÚÈÝÐòºÅ
+ 702   4                              }
+ 703   3                              else if(content[7]==content[6]^content[5]^content[4]^content[3]^content[2]^content[1])//Ð£Ñé               °´Î»Òì
+             -»ò(^):Èç¹ûÁ½¸öÏàÓ¦µÄ¶þ½øÖÆÎ»Öµ²»Í¬ÔòÎª1,·ñÔòÎª0¡£
+ 704   3                              { 
+ 705   4                                      content_target=0;//´æ´¢ÄÚÈÝÎ»
+ 706   4                                      content_target|=content[3];                                               //°´Î»»ò
+ 707   4                                      content_target=content_target<<8|content[4];
+ 708   4                                      content_target=content_target<<8|content[5];
+ 709   4                                      content_target=content_target<<8|content[6];    
+ 710   4                                      
+ 711   4      /*0~3*/ if(content[1]<4)//¹¦ÄÜ0~3£¬¹¦ÂÊ°Ù·Ö±È¡¢Ê±¼ä»òÎÞÏÞÖÆ
+ 712   4                                      {
+ 713   5                                              function=content[1];//¹¦ÄÜÎ»
+ 714   5                                              power=(char)content[2];//¹¦ÂÊ°Ù·Ö±È
+ 715   5                                              power=power*1.5;
+ 716   5                                              if(function==0)
+ 717   5                                                      {timer=0;io_t=1;}//Ã¦Î»£ºÏÐ
+ 718   5                                              else if(timer>5)
+ 719   5                                                      {timer=content_target;io_t=1;}//Ã¦Î»£ºÏÐ
+ 720   5                                              stop_i=0;stop_lasterr=0;//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã
+ 721   5                                              if(function==0)//Èç¹ûµ±Ç°¹¦ÄÜÎª10£¬ÔòÇåÁã¼ÆÊ±£¬È¡ÏûÃ¦Î»
+ 722   5                                                      {timer=0;io_t=1;}
+ 723   5                                              else
+ 724   5                                                      {timer=content_target;io_t=0;}
+ 725   5                                              motor_stop_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯  
+ 726   5                                      }
+ 727   4      /*4~6*/ else if(content[1]<7)//¹¦ÄÜ4~6£¬¹¦ÂÊ°Ù·Ö±È¡¢½Ç¶ÈÔöÁ¿
+ 728   4                                      { 
+ 729   5                                              power=(char)content[2];//¹¦ÂÊ°Ù·Ö±È
+ 730   5                                              power=power*1.5;
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 13  
+
+ 731   5                                        angle_target=(long)content_target;//Ä¿±ê½Ç¶È£¨ÁÙÊ±´æ´¢£©
+ 732   5                                              receive_angle_increment();//ÔöÁ¿½Ç¶È¼ÇÂ¼³ÌÐò     
+ 733   5                                              function=content[1];//ÖÃ¹¦ÄÜÎ»
+ 734   5                                              stop_i=0;stop_lasterr=0;//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã   
+ 735   5                                              motor_sangle_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯        
+ 736   5                                              io_t=0;//Ã¦Î»:Ã¦
+ 737   5                                      }               
+ 738   4      /*7~9*/ else if(content[1]<10)//¹¦ÄÜ7~9£¬¹¦ÂÊ°Ù·Ö±È¡¢½Ç¶È¾ø¶ÔÖµ
+ 739   4                                      {
+ 740   5                                              power=(char)content[2];//¹¦ÂÊ°Ù·Ö±È
+ 741   5                                              power*=1.5;
+ 742   5                                        angle_target=(long)content_target;//Ä¿±ê½Ç¶È£¨ÁÙÊ±´æ´¢£©
+ 743   5                                              receive_angle_absolute();//Ä¿±êÁ¿¾ø¶ÔÖµ¼ÇÂ¼
+ 744   5                                              function=content[1]-3;//ÖÃ¹¦ÄÜÎ»
+ 745   5                                              stop_i=0;stop_lasterr=0;//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã   
+ 746   5                                              motor_sangle_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯        
+ 747   5                                              io_t=0;//Ã¦Î»:Ã¦
+ 748   5                                      }
+ 749   4      /*10~13*/else if(content[1]<14)//¹¦ÄÜ0~3£¬ºãËÙ¡¢Ê±¼ä»òÎÞÏÞÖÆ
+ 750   4                                      {
+ 751   5                                              power=(char)content[2];//ËÙ¶È
+ 752   5                                              power=power*8/10;
+ 753   5                                              if(content[1]!=10)
+ 754   5                                              {stop_i=0;stop_lasterr=0;}//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã
+ 755   5                                              //speed_lastangle=angle;//ºãËÙPIDÖÐ¼ÇÂ¼ÉÏ´Î½Ç¶È
+ 756   5                                              //if(function<10 || function>19)//Èç¹ûÔ­À´²»ÊÇºãËÙÄ£Ê½£¬ÔòÇåÁãºãËÙPID²ÎÊý
+ 757   5                                              //      {speed_i=0;speed_lasterr=0;}
+ 758   5                                              function=content[1];//¹¦ÄÜÎ»
+ 759   5                                              if(function==10)//Èç¹ûµ±Ç°¹¦ÄÜÎª10£¬ÔòÇåÁã¼ÆÊ±£¬È¡ÏûÃ¦Î»
+ 760   5                                                      {timer=0;io_t=1;}
+ 761   5                                              else
+ 762   5                                                      {timer=content_target;io_t=0;}
+ 763   5                                              motor_stop_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯  
+ 764   5                                      }                               
+ 765   4      /*14~16*/else if(content[1]<17)//¹¦ÄÜ14~16£¬ºãËÙ¡¢½Ç¶ÈÔöÁ¿
+ 766   4                                      {
+ 767   5                                              power=(char)content[2];//ËÙ¶È
+ 768   5                                              power=power*8/10;
+ 769   5                                        angle_target=(long)content_target;//Ä¿±ê½Ç¶È£¨ÁÙÊ±´æ´¢£©
+ 770   5                                              receive_angle_increment();//ÔöÁ¿½Ç¶È¼ÇÂ¼³ÌÐò     
+ 771   5                                              function=content[1];//ÖÃ¹¦ÄÜÎ»
+ 772   5                                              stop_i=0;stop_lasterr=0;//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã
+ 773   5                                              speed_i=0;speed_lasterr=0;speed_lastangle=angle;//ºãËÙPIDÖÐ¼ÇÂ¼ÉÏ´Î½Ç¶È
+ 774   5                                              motor_sangle_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯        
+ 775   5                                              io_t=0;//Ã¦Î»:Ã¦                                
+ 776   5                                      }
+ 777   4      /*17~19*/else if(content[1]<20)//¹¦ÄÜ17~19£¬ºãËÙ¡¢½Ç¶È¾ø¶ÔÖµ
+ 778   4                                      {
+ 779   5                                              power=(char)content[2];//¹¦ÂÊ°Ù·Ö±È
+ 780   5                                              power/=2;
+ 781   5                                        angle_target=(long)content_target;//Ä¿±ê½Ç¶È£¨ÁÙÊ±´æ´¢£©
+ 782   5                                              receive_angle_absolute();//Ä¿±êÁ¿¾ø¶ÔÖµ¼ÇÂ¼
+ 783   5                                              function=content[1]-3;//ÖÃ¹¦ÄÜÎ»
+ 784   5                                              stop_i=0;stop_lasterr=0;//Í£Ö¹³ÌÐòPID²ÎÊýÇåÁã   
+ 785   5                                              speed_i=0;speed_lasterr=0;speed_lastangle=angle;//ºãËÙPIDÖÐ¼ÇÂ¼ÉÏ´Î½Ç¶È
+ 786   5                                              motor_sangle_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯        
+ 787   5                                              io_t=0;//Ã¦Î»:Ã¦
+ 788   5                                      }
+ 789   4      /*20~22*/else if(content[1]<23)
+ 790   4                                      {
+ 791   5                                              function=content[1];//ÖÃ¹¦ÄÜÎ»
+ 792   5                                              motor_sangle_record=1;//ÇÐ»»ÎªÎ´Íê³É×ª¶¯        
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 14  
+
+ 793   5                                              io_t=0;//Ã¦Î»:Ã¦
+ 794   5                                      }
+ 795   4      /*23*/  else if(content[1]<24)                          
+ 796   4                                      {
+ 797   5                                              send_allow=1;//ÔÊÐí»Ø´«
+ 798   5                                              send_num=content[2];//»Ø´«ÄÚÈÝÐòºÅ
+ 799   5                                      }       
+ 800   4                              }
+ 801   3                              content_num=0;//Íê³ÉÒ»´Î½ÓÊÕºó£¬½«½ÓÊÕÐòºÅ´òÂÒ£¬µÈ´ýÏÂÒ»´Î½ÓÊÕ²ÅÓÐÐ§
+ 802   3                      }
+ 803   2              }
+ 804   1              if(TI)
+ 805   1              {
+ 806   2                      TI=0;
+ 807   2                      serial_t_busy=0;
+ 808   2              }
+ 809   1      } 
+ 810          /*************************/
+ 811          /*´®¿Ú·¢ËÍ³¤Êý¾Ý*/
+ 812          /*************************/
+ 813          void send_long(long send_content_long)
+ 814          {
+ 815   1              serial_t_busy=1;
+ 816   1              SBUF=0xa5;
+ 817   1                              while(serial_t_busy);   serial_t_busy=1;
+ 818   1              SBUF=send_xor[0]=send_content_long>>24;
+ 819   1                              while(serial_t_busy);   serial_t_busy=1;
+ 820   1              SBUF=send_xor[1]=send_content_long>>16;
+ 821   1                              while(serial_t_busy);   serial_t_busy=1;
+ 822   1              SBUF=send_xor[2]=send_content_long>>8;
+ 823   1                              while(serial_t_busy);   serial_t_busy=1;
+ 824   1              SBUF=send_xor[3]=send_content_long;
+ 825   1                              while(serial_t_busy);   serial_t_busy=1;
+ 826   1              SBUF=send_xor[0]^send_xor[1]^send_xor[2]^send_xor[3];   //¼Ó×ÜÒì»òÐ£Ñé
+ 827   1                              while(serial_t_busy);
+ 828   1      }
+ 829          /*************************/
+ 830          /*´®¿Ú·¢ËÍ¶ÌÊý¾Ý*/
+ 831          /*************************/
+ 832          void send_int(send_content_int)
+ 833          {
+ 834   1              serial_t_busy=1;
+ 835   1              SBUF=0xa5;                         //
+ 836   1                              while(serial_t_busy);   serial_t_busy=1;
+ 837   1              SBUF=send_xor[0]=send_content_int>>8;
+ 838   1                              while(serial_t_busy);   serial_t_busy=1;
+ 839   1              SBUF=send_xor[1]=send_content_int;
+ 840   1                              while(serial_t_busy);   serial_t_busy=1;
+ 841   1              SBUF=send_xor[0]^send_xor[1];   //¼Ó×ÜÒì»òÐ£Ñé
+ 842   1                              while(serial_t_busy);
+ 843   1      }
+ 844          /*************************/
+ 845          /*T0ÖÐ¶Ï*/
+ 846          /*************************/
+ 847          void tm0_isr()interrupt 1 using 1
+ 848          {
+ 849   1              motor_program_run=1;
+ 850   1      }
+ 851          /****************/
+ 852          /*È«²¿³õÊ¼»¯ÅäÖÃ*/
+ 853          /****************/
+ 854          void Init()
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 15  
+
+ 855          {
+ 856   1              P1M0=0x23; P1M1=0;
+ 857   1              P5M0=0xff; P5M1=0;
+ 858   1              P3M0=0x20; P3M1=0;
+ 859   1              
+ 860   1      
+ 861   1              EA=1;   //´ò¿ª×ÜÖÐ¶Ï
+ 862   1              ES=1;   //´ò¿ª´®¿ÚÖÐ¶Ï
+ 863   1              EX0=1;  //´ò¿ªÍâÖÐ¶Ï0
+ 864   1              IP=0x01;//ÉèÖÃÍâÖÐ¶Ï0Îª×î¸ßÓÅÏÈ¼¶,ÆäËûÎªµÍÓÅÏÈ¼¶
+ 865   1              EX1=1;  //´ò¿ªÍâÖÐ¶Ï1   
+ 866   1              ET0=1;  //´ò¿ªT0ÖÐ¶Ï
+ 867   1              EADC=1; //´ò¿ªADÖÐ¶Ï
+ 868   1              
+ 869   1              IT0=0;  //ÍâÖÐ¶Ï0£ºÉÏÏÂÑØ´¥·¢£¬ÓÃÓÚ¼ì²â±àÂëÆ÷
+ 870   1              IT1=1;  //ÍâÖÐ¶Ï1£º½öÏÂ½µÑØ´¥·¢£¬
+ 871   1              
+ 872   1        UartInit();//´®¿ÚÉèÖÃ
+ 873   1              PWMInit(); //ÉèÖÃPWM
+ 874   1              Timer0Init();//¶¨Ê±Æ÷0ÉèÖÃ
+ 875   1              ADInit();//ÉèÖÃAD
+ 876   1      }
+ 877          /*********/
+ 878          /*ÉèÖÃAD*/
+ 879          /*********/
+ 880          void ADInit()
+ 881          {
+ 882   1              P1ASF=0x1c;//ÔÊÐíAD4 AD3 AD2
+ 883   1      }
+ 884          /**********/
+ 885          /*ÉèÖÃ´®¿Ú*/
+ 886          /**********/
+ 887          void UartInit(void)             //115200bps@33.1776MHz
+ 888          {
+ 889   1              SCON = 0x50;            //8Î»Êý¾Ý,¿É±ä²¨ÌØÂÊ
+ 890   1              AUXR |= 0x01;           //´®¿Ú1Ñ¡Ôñ¶¨Ê±Æ÷2Îª²¨ÌØÂÊ·¢ÉúÆ÷
+ 891   1              AUXR |= 0x04;           //¶¨Ê±Æ÷2Ê±ÖÓÎªFosc,¼´1T
+ 892   1              T2L = 0xB8;             //Éè¶¨¶¨Ê±³õÖµ
+ 893   1              T2H = 0xFF;             //Éè¶¨¶¨Ê±³õÖµ
+ 894   1              AUXR |= 0x10;           //Æô¶¯¶¨Ê±Æ÷2
+ 895   1      }
+ 896          
+ 897          /*********/
+ 898          /*ÉèÖÃPWM*/
+ 899          /*********/
+ 900          void PWMInit()
+ 901          {
+ 902   1              P_SW1=0; //´®¿Ú¡¢PWM¡¢SPIÔÚÄ¬ÈÏIO
+ 903   1              CCON=0; //³õÊ¼»¯PCA¿ØÖÆ¼Ä´æÆ÷
+ 904   1              CL = 0;
+ 905   1              CH = 0;
+ 906   1              CMOD=0x8c; //ÉèÖÃPWMÊ±ÖÓÎª:ÏµÍ³Ê±ÖÓ/6
+ 907   1              CCAPM0=0x42;//PCA1ÉèÖÃÎªPWMÄ£Ê½
+ 908   1              PCA_PWM0=0;//ÉèÖÃÎª8Î»PWM
+ 909   1              CCAPM1=0x42;//PCA2ÉèÖÃÎªPWMÄ£Ê½
+ 910   1              PCA_PWM1=0;//ÉèÖÃÎª8Î»PWM
+ 911   1              CCAPM2=0x42;//PCA2ÉèÖÃÎªPWMÄ£Ê½         
+ 912   1              PCA_PWM2=0;//ÉèÖÃÎª8Î»PWM
+ 913   1              CR=1;                   //PCA¶¨Ê±Æ÷¿ªÊ¼
+ 914   1      }
+ 915          /********/
+ 916          /*ÉèÖÃT0*/
+C51 COMPILER V9.00   MAIN                                                                  06/10/2022 22:40:53 PAGE 16  
+
+ 917          /********/
+ 918          void Timer0Init(void)           //5ºÁÃë@33.1776MHz
+ 919          {
+ 920   1              AUXR &= 0x7F;           //¶¨Ê±Æ÷Ê±ÖÓ12TÄ£Ê½
+ 921   1              TMOD &= 0xF0;           //ÉèÖÃ¶¨Ê±Æ÷Ä£Ê½
+ 922   1              TL0 = 0x00;             //ÉèÖÃ¶¨Ê±³õÖµ
+ 923   1              TH0 = 0xCA;             //ÉèÖÃ¶¨Ê±³õÖµ
+ 924   1              TF0 = 0;                //Çå³ýTF0±êÖ¾
+ 925   1              TR0 = 1;                //¶¨Ê±Æ÷0¿ªÊ¼¼ÆÊ±
+ 926   1      }
+ 927          /********************************/
+ 928          /*¿ØÖÆµç»úº¯Êý¡£²ÎÊý·¶Î§-150~150*/
+ 929          /********************************/
+ 930          void motor_move(int motor_move_n)
+ 931          {
+ 932   1              if(motor_move_n<-150)
+ 933   1              {
+ 934   2                      CCAP0H=0;motor_CCW;                                                     //PWM0±È½ÏÖµÉèÎª0£¬·´×ªÄ£Ê½£¨PWM0³ÖÐø¸ßµçÎ»£¬<-150Ê±³¬³öµ÷ËÙ·¶Î§£¬È«ËÙ·´×ª£©
+ 935   2              }
+ 936   1              else if(motor_move_n<0)
+ 937   1              {
+ 938   2                      CCAP0H=150+motor_move_n;motor_CCW;                      //PWM0±È½ÏÖµÉèÖÃÎª150+motor_move_n,·´×ªÄ£Ê½
+ 939   2              }
+ 940   1              else if(motor_move_n==0)
+ 941   1              {
+ 942   2                      CCAP0H=0; motor_brake;                                          //PWM0±È½ÏÖµÉèÖÃÎª0,Ë«¸ßµçÎ»£¬É²³µ
+ 943   2              }
+ 944   1              else if(motor_move_n<150)
+ 945   1              {
+ 946   2                      CCAP0H=150-motor_move_n;motor_CW;                       //±È½ÏÖµÎªÕýÖµ£¬Õý×ª£¬±È½ÏÖµÎª150-motor_move_n£¬¼´ÖµÔ½´ó×ªËÙÔ½¿ì 
+ 947   2              }
+ 948   1              else
+ 949   1              {
+ 950   2                      CCAP0H=0;motor_CW;                                                      //PWM0±È½ÏÖµÉèÎª0£¬·´×ªÄ£Ê½£¨PWM0³ÖÐø¸ßµçÎ»£¬>150Ê±³¬³öµ÷ËÙ·¶Î§£¬È«ËÙÕý×ª£©                             
+             -                                                                                                          
+ 951   2              }
+ 952   1      }
+ 953          void UART_SendByte(unsigned char Byte)
+ 954          {
+ 955   1              SBUF=Byte;
+ 956   1              while(TI==0);
+ 957   1              TI=0;
+ 958   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4661    ----
+   CONSTANT SIZE    =    189    ----
+   XDATA SIZE       =     52    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     78       9
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      5       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
