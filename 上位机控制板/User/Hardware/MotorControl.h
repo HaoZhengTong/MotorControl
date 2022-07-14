@@ -1,0 +1,21 @@
+#ifndef __MOTORCONTROL_H__
+#define __MOTORCONTROL_H__
+#include "ch32v30x.h"
+void MotorInit(void);
+void MotorFullSpeed(void);
+void MotorFullSpeedHalf(void);
+void MotorSpeedINIT(void);
+void MotorSpeedSET(void);
+void MotorSpeedHigh(void);
+void MotorSpeedLow(void);
+void MotorTurnLeft(void);
+void MotorTurnRight(void);
+void MotorSTOP(void);
+void MotorAngleGet(void);
+void MotorSpeedGet(void);
+void MotorVoltageGet(void);
+void MotorCurrentGet(void);
+void MotorTempGet(void);
+void MotorPowerGet(void);
+void MotorInformationGet(void);
+#endif
